@@ -20,6 +20,11 @@ pub fn get_random<T>(range: Range<T>) -> T
     where
         T: PartialOrd + Copy + SampleUniform,
 {
+    if range.start >= range.end {
+        // return None; // Return None for an empty or invalid range
+        return range.start;
+    }
+
     let mut rng = rand::thread_rng(); // Create a random number generator
     rng.gen_range(range.start..range.end) // Generate a random number
 }
@@ -61,6 +66,12 @@ mod tests {
     #[test]
     fn test_get_random() {
         let num = get_random(0..10);
+        assert!(num >= 0 && num < 10);
+    }
+
+    #[test]
+    fn test_get_random_with_empty_range() {
+        let num = get_random(0..0);
         assert!(num >= 0 && num < 10);
     }
 
