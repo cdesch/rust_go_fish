@@ -10,13 +10,3 @@ cardpack = "0.5.0"
 rand = "0.8.5"
 
 
-
-[lints.rust]
-unused_imports = "allow"
-unused_variables = "allow"
-unused_comparisons = "allow"
-dead_code = "allow"
-
-[lints.clippy]
-let_and_return= "allow"
-if_same_then_else = "allow"
