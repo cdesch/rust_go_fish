@@ -1,6 +1,6 @@
+use rand::distributions::uniform::SampleUniform;
 use rand::Rng;
 use std::ops::Range;
-use rand::distributions::uniform::{SampleUniform};
 
 /// Generate a random number within a range
 ///
@@ -17,8 +17,8 @@ use rand::distributions::uniform::{SampleUniform};
 /// assert!(num >= 0 && num < 10);
 /// ```
 pub fn get_random<T>(range: Range<T>) -> T
-    where
-        T: PartialOrd + Copy + SampleUniform,
+where
+    T: PartialOrd + Copy + SampleUniform,
 {
     if range.start >= range.end {
         // return None; // Return None for an empty or invalid range
@@ -28,7 +28,6 @@ pub fn get_random<T>(range: Range<T>) -> T
     let mut rng = rand::thread_rng(); // Create a random number generator
     rng.gen_range(range.start..range.end) // Generate a random number
 }
-
 
 /// Generate a random number within a range, excluding a specific number
 ///
@@ -46,8 +45,8 @@ pub fn get_random<T>(range: Range<T>) -> T
 /// assert_ne!(num, 5);
 /// ```
 pub fn get_random_excluding<T>(range: Range<T>, exclude: T) -> T
-    where
-        T: PartialOrd + Copy + SampleUniform,
+where
+    T: PartialOrd + Copy + SampleUniform,
 {
     let mut rng = rand::thread_rng(); // Create a random number generator
 

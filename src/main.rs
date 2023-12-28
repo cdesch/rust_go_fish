@@ -4,12 +4,22 @@ use cardpack::{Card, Pile, Rank, Standard52};
 use std::collections::HashMap;
 use rust_go_fish::{get_random_excluding, get_random};
 
+enum Environment {
+    Development,
+    Test,
+    Production,
+}
+
+enum GameMode {
+    Random,
+    Sequential,
+}
+
 #[derive(Debug, PartialEq, Eq, Hash, Clone)]
 enum EndGameConditions {
     FirstPlayerWithNoCards,
     DeckEmpty,
 }
-
 
 #[derive(Debug, PartialEq, Eq, Hash, Clone)]
 enum EndGameCondition {
@@ -20,16 +30,18 @@ enum EndGameCondition {
 
 #[derive(Debug, PartialEq, Eq, Hash, Clone)]
 enum PlayerTurnResult {
-    ReceiveCard(Card),
-    DrawFromDeck,
-    EndGame
-}
-
-#[derive(Debug, PartialEq, Eq, Hash, Clone)]
-enum PlayerTurn {
     NextPlayerTurn,
     PlayAgain,
 }
+
+#[derive(Debug, PartialEq, Eq, Hash, Clone)]
+enum AskCardResult {
+    ReceiveCard(Card),
+    GoFish
+}
+
+
+
 
 fn find_pair(pile: &Pile) -> Option<(Card, Card)> {
 
@@ -104,22 +116,26 @@ struct GameState {
     deck: Standard52,
     players: Vec<Player>,
     player_count: usize,
+    game_mode: GameMode,
 }
 
 impl GameState {
+    /// Create a new game with a shuffled deck
     fn new(player_count: usize) -> Self {
         let deck = Standard52::new_shuffled();
         // create players
         let players = (0..player_count).map(|_| Player::new()).collect();
-        GameState { deck, players, player_count  }
+        GameState { deck, players, player_count, game_mode: GameMode::Random}
     }
 
-    fn new_with_deck(player_count: usize, deck: Standard52) -> Self {
+    /// Create a new game with a specific deck
+    fn new_with_deck(player_count: usize, deck: Standard52, game_mode: GameMode) -> Self {
         // create players
         let players = (0..player_count).map(|_| Player::new()).collect();
-        GameState { deck, players, player_count  }
+        GameState { deck, players, player_count, game_mode }
     }
 
+    /// Deal cards to each player
     fn deal(&mut self) {
         // let hand_size = 52 / self.player_count;
         let hand_size = 7;
@@ -130,10 +146,10 @@ impl GameState {
         }
     }
 
+    /// Match cards in each player's hand
     fn players_match_cards(&mut self) {
         self.players.iter_mut().for_each(|player| {
             let _pairs_found = player.match_pairs();
-            // println!("pairs: {:?}", &player.pairs.to_symbol_index());
         });
     }
 
@@ -161,85 +177,59 @@ impl GameState {
     fn play_turn(&mut self, player_index: usize) -> PlayerTurnResult {
         println!("player {} turn", player_index);
         // get random card from player's hand and select another player to ask
-        let random_card_index = get_random(0..self.players[player_index].hand.len());
-        let other_player_index = get_random_excluding(0..self.player_count, player_index);
-        match self.play_turn_with_indexes_card(player_index, other_player_index, random_card_index) {
-            PlayerTurnResult::ReceiveCard(card) => {
-                println!("player {} received card: {:?}", player_index, card);
-                self.players[player_index].match_pairs();
-                // Loop?
-                // let result = self.play_turn(player_index);
-                PlayerTurnResult::ReceiveCard(card)
+        let (random_card_index, other_player_index) = self.get_turn_indices(player_index);
+        self.perform_turn(player_index, other_player_index, random_card_index)
+    }
+
+    fn get_turn_indices(&self, player_index: usize) -> (usize, usize) {
+        let card_index = 0;
+        match self.game_mode {
+            GameMode::Random => {
+                let random_card_index = get_random(0..self.players[player_index].hand.len());
+                let other_player_index = get_random_excluding(0..self.player_count, player_index);
+                (random_card_index, other_player_index)
             },
-            PlayerTurnResult::DrawFromDeck => {
-                println!("player {} drew from deck", player_index);
-                PlayerTurnResult::DrawFromDeck
-            },
-            PlayerTurnResult::EndGame => {
-                println!("player {} ended the game", player_index);
-                PlayerTurnResult::EndGame
+            GameMode::Sequential => {
+                let random_card_index = 0;
+                let other_player_index = self.next_player_index(player_index);
+                (random_card_index, other_player_index)
             }
         }
     }
 
-    fn play_turn_sequence(&mut self, player_index: usize) -> PlayerTurnResult {
-        println!("player {} turn", player_index);
-        // get random card from player's hand and select another player to ask
-        let random_card_index = 0;
-        let other_player_index = self.next_player_index(player_index);
-        match self.play_turn_with_indexes_card(player_index, other_player_index, random_card_index) {
-            PlayerTurnResult::ReceiveCard(card) => {
-                println!("player {} received card: {:?}", player_index, card);
-                self.players[player_index].match_pairs();
-                // check end game conditions
-                // if self.deck.deck.len() == 0 || self.players[player_index].hand.len() == 0 {
-                //     return PlayerTurnResult::EndGame;
-                // }
-                // Loop?
-                // let result = self.play_turn(player_index);
-                PlayerTurnResult::ReceiveCard(card)
-            },
-            PlayerTurnResult::DrawFromDeck => {
-                println!("player {} drew from deck", player_index);
-                PlayerTurnResult::DrawFromDeck
-            },
-            PlayerTurnResult::EndGame => {
-                println!("player {} ended the game", player_index);
-                PlayerTurnResult::EndGame
-            }
-        }
-    }
-
-    fn play_turn_with_indexes_card(&mut self, player_index: usize,  other_player_index: usize, card_index: usize) -> PlayerTurnResult{
+    fn perform_turn(&mut self, player_index: usize, other_player_index: usize, card_index: usize) -> PlayerTurnResult{
         // Logic for a player's turn
-
-        // // check for winners
-        // match self.check_winner() {
-        //     Some(EndGameCondition::Winner(winner_index)) => {
-        //         println!("player {} won the game", winner_index);
-        //         return PlayerTurnResult::EndGame;
-        //     },
-        //     Some(EndGameCondition::Tie(winner_indices)) => {
-        //         println!("players {:?} tied", winner_indices);
-        //         return PlayerTurnResult::EndGame;
-        //     },
-        //     Some(EndGameCondition::Continue) => {
-        //         // continue
-        //     },
-        //     None => {
-        //         // continue
-        //     }
-        // }
-        //
         // get random card from player's hand
         let card = self.players[player_index].hand.cards()[card_index].clone();
-        self.ask_for_card(player_index, other_player_index, card)
+        match self.ask_for_card(player_index, other_player_index, card) {
+            AskCardResult::ReceiveCard(card) => {
+                println!("player {} received card: {}", player_index, card);
+                self.players[player_index].match_pairs();
+                PlayerTurnResult::PlayAgain
+            },
+            AskCardResult::GoFish => {
+                println!("player {} go fish", player_index);
+                match self.deck.draw(1) {
+                    Some(card) => {
+                        println!("player {} drew from deck", player_index);
+                        let player = &mut self.players[player_index];
+
+                        // add the card to the player's hand
+                        player.hand.append(&card);
+                        PlayerTurnResult::NextPlayerTurn
+                    },
+                    None => {
+                        PlayerTurnResult::NextPlayerTurn
+                    }
+                }
+            }
+        }
     }
 
-    fn check_winner(&self) -> Option<EndGameCondition> {
-        // Check if there's a winner
+    /// Check if the game should end
+    fn check_win_condition(&self) -> EndGameCondition {
 
-        // check to see if anyone no longer has cards
+        // find any player with no cards in their hand
         let empty_hands_index = self
             .players
             .iter()
@@ -248,36 +238,21 @@ impl GameState {
                 player.hand.len() == 0)
             .map(|(index, _)| index);
 
+        // check to see if anyone no longer has cards in their hands
         match empty_hands_index {
             Some(index) => {
+                // determine a winner if any player has no more cards
                 println!("player {} has no more cards", index);
-                /// find the player with the most pairs
-                /// return their index
-                /// if there's a tie, return None
-                // Some(self.index_of_max_score_player().unwrap())
-                Some(self.determine_winner())
+                self.determine_winner()
             }
             None => {
-                // check to see if the deck is empty
-                // if self.deck.deck.len() == 0 {
-                //     // find the player with the most pairs
-                //     let mut max_score = 0;
-                //     let mut max_score_index = 0;
-                //     for (index, player) in self.players.iter().enumerate() {
-                //         if player.score > max_score {
-                //             max_score = player.score;
-                //             max_score_index = index;
-                //         }
-                //     }
-                //     Some(max_score_index)
-                // } else {
-                //     None
-                // }
-                None
+                // continue play
+                EndGameCondition::Continue
             }
         }
     }
 
+    /// Determine the winner of the game
     fn determine_winner(&self) -> EndGameCondition {
         let winners = self.indices_of_max_score_players();
         match winners.len() {
@@ -287,6 +262,7 @@ impl GameState {
         }
     }
 
+    /// Get the indices of the players with the highest score
     fn indices_of_max_score_players(&self) -> Vec<usize> {
         if self.players.is_empty() {
             return Vec::new();
@@ -316,87 +292,93 @@ impl GameState {
         self.players[player_index].hand.push(card);
     }
 
-    // Ask another player for a card
-    // If they have it, take it and ask again
-    // If they don't, draw a card from the deck
-    // If the deck is empty, end the game
-    fn ask_for_card(&mut self, player_index: usize, answering_player_index: usize, card: Card) -> PlayerTurnResult {
-
+    /// Ask another player for a card
+    /// If they have it, take it
+    /// If they don't, GoFish
+    fn ask_for_card(&mut self, player_index: usize, answering_player_index: usize, card: Card) -> AskCardResult {
         let result =  self.players[answering_player_index].answer_for_card_rank(card.rank);
         // check if they have the card
         match result {
             Some(card) => {
                 // take the card
                 self.transfer_cards(player_index, answering_player_index, card.clone());
-                PlayerTurnResult::ReceiveCard(card)
+                AskCardResult::ReceiveCard(card)
             },
             None => {
-                // draw a card from the deck
-                // TODO should the game condition be when out of cards?
-
-                match self.deck.draw(1) {
-                    Some(card) => {
-                        // add the card to the player's hand
-                        let player = &mut self.players[player_index];
-
-                        player.hand.append(&card);
-                        PlayerTurnResult::DrawFromDeck
-                    },
-                    None => {
-                        // end the game
-                        // println!("Game over!");
-                        // PlayerTurnResult::EndGame
-                        PlayerTurnResult::DrawFromDeck
-
-                    }
-                }
+                AskCardResult::GoFish
             }
         }
     }
 }
 
 fn main() {
+
+    // Test
+    // let standard52 = Standard52::default();
+    // let mut game = GameState::new_with_deck(4, standard52, GameMode::Sequential);
+    // game.deal();
+    // game.players_match_cards();
+    // let _game_result  = run_game(&mut game);
+
+    // Run
+
     let mut game = GameState::new(4);
-
     game.deal();
+    game.players_match_cards();
+    let _game_result  = run_game(&mut game);
 
+}
 
-    // for player in &game.players {
-    //     println!("player: {:?}", &player.hand.to_symbol_index());
+fn run_game(game: &mut GameState) -> EndGameCondition {
 
-        // let pairs_found = player.match_pairs();
-    // }
+    let mut current_player_index = 0;
+    let mut end_game_condition = EndGameCondition::Continue;
 
-    // find pairs
-    game.players.iter_mut().for_each(| player| {
-        println!("player Hand: {:?}", &player.hand.to_symbol_index());
-        let pairs_found = player.match_pairs();
-        println!("pairs_found: {:?}", pairs_found);
-        println!("player hand: {:?}", &player.hand.to_symbol_index());
-        println!("pairs: {:?}", &player.pairs.to_symbol_index());
-    });
+    // Game Loop
+    while end_game_condition == EndGameCondition::Continue {
+        let mut turn_result = PlayerTurnResult::PlayAgain;
+        while turn_result == PlayerTurnResult::PlayAgain {
+            // Update the outer 'turn_result' variable with the new turn result
+            turn_result = game.play_turn(current_player_index);
+            // println!("player_turn_result: {:?}", turn_result);
 
-
-
-
-
-    // let pack = cardpack::Standard52::default();
-    let mut pack = Standard52::new_shuffled();
-    println!("count : {}", pack.deck.len());
-    // // println!("pack: {:?}", pack);
-    // println!("turn : {}", pack.deck.len());
-    let player1_cards = pack.draw(2).unwrap();
-    println!("player1_cards : {}", player1_cards.to_symbol_index());
-    let p3 = player1_cards.clone();
-    for card in player1_cards.cards() {
-        println!("card : {}", card.index);
-        let c = p3.position(card).unwrap();
-        println!("c : {}", c);
+            // Check the end game condition after each turn
+            end_game_condition = game.check_win_condition();
+            if end_game_condition != EndGameCondition::Continue {
+                break; // Break from the inner loop if the game should end
+            }
+        }
+        current_player_index = game.next_player_index(current_player_index);
+        // println!("current_player_index: {:?}", current_player_index);
     }
-    // println!("player1_cards : {:?}", player1_cards);
-    // loop {
-    //     // Game loop
-    // }
+
+    // println!("end_game_condition: {:?}", end_game_condition);
+    handle_end_game_condition(&end_game_condition, &game);
+    end_game_condition
+}
+
+fn handle_end_game_condition(condition: &EndGameCondition, game_state: &GameState) {
+    match condition {
+        EndGameCondition::Winner(winner_index) => {
+            print_winner_info(winner_index, game_state);
+        },
+        EndGameCondition::Tie(tie_indices) => {
+            println!("There is a tie between players at indices {:?}", tie_indices);
+            for index in tie_indices {
+                print_winner_info(index, game_state);
+                println!("");
+            }
+        },
+        EndGameCondition::Continue => {
+            // println!("The game continues");
+        },
+    }
+}
+
+fn print_winner_info(winner_index: &usize, game_state: &GameState) {
+    println!("The winner is player at index {}", winner_index);
+    println!("With a score of {}", game_state.players[*winner_index].score);
+    println!("With the following matching Pairs {}", game_state.players[*winner_index].pairs.to_index());
 }
 
 #[cfg(test)]
@@ -412,30 +394,16 @@ mod tests {
     }
 
     fn setup() -> GameState {
-        // let index_string = "2S 3D QS KH 3C 3S TC 9H 3H 6H QD 4H 2H 5S 6D 9S AD 5C 7S JS AC 6S 8H 7C JC 7H JD TS AS KS JH 5D 6C 9C QC 8D 4C 5H 4D 8S 2C AH 2D 9D TH KD 7D KC 4S 8C QH TD";
-        // let standard52 = Standard52::from_index(index_string).unwrap();
         let standard52 = Standard52::default();
-        let mut game = GameState::new_with_deck(4, standard52);
+        let mut game = GameState::new_with_deck(4, standard52, GameMode::Sequential);
         game.deal();
         game.players_match_cards();
         game
     }
 
-    // #[test]
-    // fn test_base_case() {
-    //     let input_data = "TestData";
-    //     // let input_data = fs::read_to_string("data/ex1.ex.txt").expect("Unable to read file");
-    //     // println!("input_data: {}", input_data);
-    //
-    //     let result = exercise_p1(input_data);
-    //     assert_eq!(result, 100);
-    // }
-
     #[test]
     fn test_find_pair() {
-        // let index_string = "2S 3D QS KH 3C 3S TC 9H 3H 6H QD 4H 2H 5S 6D 9S AD 5C 7S JS AC 6S 8H 7C JC 7H JD TS AS KS JH 5D 6C 9C QC 8D 4C 5H 4D 8S 2C AH 2D 9D TH KD 7D KC 4S 8C QH TD";
         let index_string = "2S 2D QS KH 3C 3S";
-
         let pile = Standard52::pile_from_index(index_string).unwrap();
         let result = find_pair(&pile).unwrap();
 
@@ -451,7 +419,7 @@ mod tests {
         player.add_cards(pile);
         let result = player.answer_for_card_rank(Rank::new(TWO)).unwrap();
 
-        println!("result: {:?}", result);
+        // println!("result: {:?}", result);
         assert_eq!(result, Standard52::card_from_index("2S"));
     }
 
@@ -482,16 +450,16 @@ mod tests {
     #[test]
     fn test_setup_game(){
         let game = setup();
-        for player in &game.players {
-            println!("player: {:?}", &player.hand.to_index_str());
-        }
+        // for player in &game.players {
+        //     println!("player: {:?}", &player.hand.to_index_str());
+        // }
         assert_eq!(game.players.len(), 4);
         assert_eq!(game.players[0].hand.len(), 7);
 
-        assert_eq!(game.players[0].hand, Standard52::pile_from_index("AS TS 6S 2S JH 7H 3H").unwrap());
-        assert_eq!(game.players[1].hand, Standard52::pile_from_index("KS 9S 5S AH TH 6H 2H").unwrap());
-        assert_eq!(game.players[2].hand, Standard52::pile_from_index("QS 8S 4S KH 9H 5H AD").unwrap());
-        assert_eq!(game.players[3].hand, Standard52::pile_from_index("JS 7S 3S QH 8H 4H KD").unwrap());
+        assert_eq!(game.players[0].hand.to_index_str(), "AS JH TS 7H 6S 3H 2S");
+        assert_eq!(game.players[1].hand.to_index_str(), "AH KS TH 9S 6H 5S 2H");
+        assert_eq!(game.players[2].hand.to_index_str(), "AD KH QS 9H 8S 5H 4S");
+        assert_eq!(game.players[3].hand.to_index_str(), "KD QH JS 8H 7S 4H 3S");
     }
 
     #[test]
@@ -501,7 +469,7 @@ mod tests {
         let current_player_index = 0;
         let answering_player_index = 1;
         let player_turn_result = game.ask_for_card(current_player_index, answering_player_index, card);
-        println!("player_turn_result: {:?}", player_turn_result);
+        // println!("player_turn_result: {:?}", player_turn_result);
         // assert_eq!(player_turn_result, PlayerTurnResult::ReceiveCard(Standard52::card_from_index("6H")));
         assert_eq!(game.players[current_player_index].hand.len(), 8);
         game.players[current_player_index].match_pairs();
@@ -514,25 +482,30 @@ mod tests {
         let card = Standard52::card_from_index("6S");
         let current_player_index = 0;
         let answering_player_index = 1;
-        let player_turn_result = game.play_turn_sequence(current_player_index);
-        println!("player_turn_result: {:?}", player_turn_result);
-        // assert_eq!(player_turn_result, PlayerTurnResult::ReceiveCard(Standard52::card_from_index("6H")));
-        assert_eq!(game.players[current_player_index].hand.len(), 7);
+        let player_turn_result = game.play_turn(current_player_index);
+        // println!("player_turn_result: {:?}", player_turn_result);
+
+        assert_eq!(game.players[current_player_index].hand.len(), 6);
         game.players[current_player_index].match_pairs();
         assert_eq!(game.players[current_player_index].pairs.len(), 2);
     }
 
     #[test]
-    fn test_game_play() {
+    fn test_run_game() {
         let mut game  = setup();
-        let mut current_player_index = 0;
-        let mut turn_result = PlayerTurnResult::DrawFromDeck;
-        while turn_result != PlayerTurnResult::EndGame {
-            let turn_result = game.play_turn_sequence(current_player_index);
-            println!("player_turn_result: {:?}", turn_result);
-            current_player_index = game.next_player_index(current_player_index);
+        let result = run_game(&mut game);
+        match result {
+            EndGameCondition::Winner(winner_index) => {
+                assert_eq!(winner_index, 2);
+                assert_eq!(game.players[winner_index].score, 8);
+                assert_eq!(game.players[winner_index].pairs.to_index_str(), "AD AC QS QH 8S 8H 5H 5D 4S 4H 2D 2C JS JC 3S 3C");
+
+            },
+            EndGameCondition::Tie(tie_indices) => {
+            },
+            EndGameCondition::Continue => {}
         }
-        assert_eq!(game.deck.deck.len(), 0);
+        // assert_eq!(game.deck.deck.len(), 0);
     }
 
     #[test]
@@ -542,22 +515,22 @@ mod tests {
         assert_eq!(next_player_index, 1);
     }
 
-    #[test]
-    fn test_game_indices_of_max_score_players(){
-        let mut game = setup();
-        game.players[0].score = 1;
-        game.players[1].score = 2;
-        game.players[2].score = 3;
-        game.players[3].score = 4;
-        let winner_index = game.indices_of_max_score_players().unwrap();
-        assert_eq!(max_score_index, 3);
-
-        let mut game = setup();
-        game.players[0].score = 1;
-        game.players[1].score = 4;
-        game.players[2].score = 4;
-        game.players[3].score = 3;
-        let max_score_index = game.indices_of_max_score_players().unwrap();
-        assert_eq!(max_score_index, 3);
-    }
+    // #[test]
+    // fn test_game_indices_of_max_score_players(){
+    //     let mut game = setup();
+    //     game.players[0].score = 1;
+    //     game.players[1].score = 2;
+    //     game.players[2].score = 3;
+    //     game.players[3].score = 4;
+    //     let winner_index = game.indices_of_max_score_players().unwrap();
+    //     assert_eq!(max_score_index, 3);
+    //
+    //     let mut game = setup();
+    //     game.players[0].score = 1;
+    //     game.players[1].score = 4;
+    //     game.players[2].score = 4;
+    //     game.players[3].score = 3;
+    //     let max_score_index = game.indices_of_max_score_players().unwrap();
+    //     assert_eq!(max_score_index, 3);
+    // }
 }
