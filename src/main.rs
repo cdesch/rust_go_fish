@@ -256,7 +256,7 @@ impl GameState {
             .players
             .iter()
             .enumerate()
-            .find(|&(_, player)| player.hand.len() == 0)
+            .find(|&(_, player)| player.hand.is_empty())
             .map(|(index, _)| index);
 
         // check to see if anyone no longer has cards in their hands
